@@ -1,9 +1,19 @@
-from fastapi import status
+import dotenv
+from typenv import Env
+from fastapi import status, Depends
 from fastapi.exceptions import HTTPException
-from typing import List
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import List, Optional
 from typing_extensions import TypedDict
 from mem0 import Memory
 from mem0ai_config import vector_config, llm_config, embedding_config
+from errors.exception import UnauthorizedException
+
+dotenv.load_dotenv()
+
+env = Env()
+
+authorization_scheme = HTTPBearer(auto_error=False)
 
 
 class MemoryHistory(TypedDict):
@@ -29,3 +39,11 @@ def get_memory_id(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'Memory {memory_id} not found')
 
     return memory_id
+
+
+def authorize(token: Optional[HTTPAuthorizationCredentials] = Depends(authorization_scheme)):
+    auth_key = env.str("AUTH_KEY", default="")
+    if auth_key == "" or (token is not None and token.credentials == auth_key):
+        pass
+    else:
+        raise UnauthorizedException()

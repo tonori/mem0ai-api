@@ -8,10 +8,12 @@ from fastapi.responses import JSONResponse
 from typenv import Env
 from pydantic import BaseModel
 from typing import Dict, Union, List
-from dependencies import get_memory_id, MemoryHistory
+from dependencies import get_memory_id, MemoryHistory, authorize
 from response import SuccessfulResponse, ErrorResponse
 from mem0 import Memory
 from mem0ai_config import vector_config, llm_config, embedding_config
+from errors.exception import UnauthorizedException
+from errors.handler import unauthorized_exception_handler
 
 dotenv.load_dotenv()
 env = Env()
@@ -41,12 +43,17 @@ class StoreMemoryData(BaseModel):
     prompt: Union[str, None] = None
 
 
+@api_router.get("/authorized", description="Check authorization status")
+def authorized(token=Depends(authorize)):
+    return SuccessfulResponse()
+
+
 @api_router.post(
     path="/store",
     description="Create a new memory.",
     response_model=SuccessfulResponse
 )
-async def store_memory(data: StoreMemoryData):
+async def store_memory(data: StoreMemoryData, token=Depends(authorize)):
     execute_results = mem0.add(**data.dict())
     return SuccessfulResponse(
         data=execute_results
@@ -60,6 +67,7 @@ async def store_memory(data: StoreMemoryData):
 async def update_memory(
         data: str,
         memory_id: str = Depends(get_memory_id),
+        token=Depends(authorize)
 ):
     execute_result = mem0.update(
         memory_id=memory_id,
@@ -80,6 +88,7 @@ async def search_memories(
         agent_id: Union[str, None] = None,
         run_id: Union[str, None] = None,
         limit: Union[int, None] = 100,
+        token=Depends(authorize)
 ):
     memories = mem0.search(
         query=query,
@@ -97,7 +106,7 @@ async def search_memories(
     path="/retrieve",
     description="List all memories."
 )
-async def retrieve_memories():
+async def retrieve_memories(token=Depends(authorize)):
     memories = mem0.get_all()
     return SuccessfulResponse(
         data=memories
@@ -110,6 +119,7 @@ async def retrieve_memories():
 )
 async def retrieve_memory(
         memory_id: str = Depends(get_memory_id),
+        token=Depends(authorize)
 ):
     memory = mem0.history(memory_id=memory_id)
     return SuccessfulResponse(
@@ -123,6 +133,7 @@ async def retrieve_memory(
 )
 async def delete_memory(
         memory_id: str = Depends(get_memory_id),
+        token=Depends(authorize)
 ):
     memory_histories: List[MemoryHistory] = mem0.history(memory_id=memory_id)
     if memory_histories[-1].get("is_deleted"):
@@ -149,7 +160,8 @@ async def delete_memory(
 async def delete_memory(
         user_id: Union[str, None] = None,
         agent_id: Union[str, None] = None,
-        run_id: Union[str, None] = None
+        run_id: Union[str, None] = None,
+        token=Depends(authorize)
 ):
     try:
         mem0.delete_all(
@@ -171,7 +183,7 @@ async def delete_memory(
     path="/reset-all",
     description="Reset the memory store."
 )
-async def reset_all_memories():
+async def reset_all_memories(token=Depends(authorize)):
     mem0.reset()
     return JSONResponse(
         content=SuccessfulResponse().model_dump_json(),
@@ -180,6 +192,7 @@ async def reset_all_memories():
 
 
 app.include_router(api_router)
+app.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
 
 if __name__ == "__main__":
     uvicorn.run("app:app",
