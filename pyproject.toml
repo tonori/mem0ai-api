@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "mem0ai2api"
+version = "0.1.0"
+description = ""
+authors = ["tonori <tonori@tonori.cn>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+mem0ai = "^0.0.9"
+uvicorn = "^0.30.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
