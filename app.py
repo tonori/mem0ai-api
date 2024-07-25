@@ -13,7 +13,8 @@ from response import SuccessfulResponse, ErrorResponse
 from mem0 import Memory
 from mem0ai_config import vector_config, llm_config, embedding_config
 from errors.exception import UnauthorizedException
-from errors.handler import unauthorized_exception_handler
+from errors.handler import unauthorized_exception_handler, qdrant_client_unexpected_handler
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 dotenv.load_dotenv()
 env = Env()
@@ -38,7 +39,7 @@ class StoreMemoryData(BaseModel):
     user_id: Union[str, None] = None
     agent_id: Union[str, None] = None
     run_id: Union[str, None] = None
-    metadata: Union[Dict, None] = None
+    metadata: Union[dict, None] = None
     filters: Union[Dict, None] = None
     prompt: Union[str, None] = None
 
@@ -78,24 +79,25 @@ async def update_memory(
     )
 
 
-@api_router.get(
+class SearchMemoryData(BaseModel):
+    query: str
+    user_id: Union[str, None] = None
+    agent_id: Union[str, None] = None
+    run_id: Union[str, None] = None
+    limit: Union[int, None] = 100
+    filters: Union[dict, None] = None
+
+
+@api_router.post(
     path="/search",
-    description="Search for memories."
+    description="Search for memories.",
+    dependencies=[Depends(authorize)]
 )
 async def search_memories(
-        query: str,
-        user_id: Union[str, None] = None,
-        agent_id: Union[str, None] = None,
-        run_id: Union[str, None] = None,
-        limit: Union[int, None] = 100,
-        token=Depends(authorize)
+        data: SearchMemoryData
 ):
     memories = mem0.search(
-        query=query,
-        user_id=user_id,
-        agent_id=agent_id,
-        run_id=run_id,
-        limit=limit
+        **data.dict()
     )
     return SuccessfulResponse(
         data=memories
@@ -104,10 +106,22 @@ async def search_memories(
 
 @api_router.get(
     path="/retrieve",
-    description="List all memories."
+    description="List all memories.",
+    dependencies=[Depends(authorize)]
 )
-async def retrieve_memories(token=Depends(authorize)):
-    memories = mem0.get_all()
+async def retrieve_memories(
+        user_id: Union[str, None] = None,
+        agent_id: Union[str, None] = None,
+        run_id: Union[str, None] = None,
+        limit: Union[int, None] = 100
+):
+    memories = mem0.get_all(
+        user_id=user_id,
+        agent_id=agent_id,
+        run_id=run_id,
+        limit=limit
+    )
+
     return SuccessfulResponse(
         data=memories
     )
@@ -193,6 +207,7 @@ async def reset_all_memories(token=Depends(authorize)):
 
 app.include_router(api_router)
 app.add_exception_handler(UnauthorizedException, unauthorized_exception_handler)
+app.add_exception_handler(UnexpectedResponse, qdrant_client_unexpected_handler)
 
 if __name__ == "__main__":
     uvicorn.run("app:app",
